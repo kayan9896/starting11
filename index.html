@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Match Lineup</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .pitch-container {
+            position: relative;
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        .pitch {
+            width: 100%;
+            height: 700px;
+            background-color: #538d22;
+            border: 2px solid white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .team-header {
+            height: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .team-away {
+            background-color: #00356b;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+        }
+        
+        .team-home {
+            background-color: #000000;
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        /* Pitch markings */
+        .center-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background-color: white;
+            top: 50%;
+        }
+        
+        .center-circle {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border: 2px solid white;
+            border-radius: 50%;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .penalty-box-away {
+            position: absolute;
+            width: 60%;
+            height: 20%;
+            border: 2px solid white;
+            left: 20%;
+            top: 0;
+        }
+        
+        .penalty-box-home {
+            position: absolute;
+            width: 60%;
+            height: 20%;
+            border: 2px solid white;
+            left: 20%;
+            bottom: 0;
+        }
+        
+        .goal-box-away {
+            position: absolute;
+            width: 20%;
+            height: 8%;
+            border: 2px solid white;
+            left: 40%;
+            top: 0;
+        }
+        
+        .goal-box-home {
+            position: absolute;
+            width: 20%;
+            height: 8%;
+            border: 2px solid white;
+            left: 40%;
+            bottom: 0;
+        }
+        
+        /* Player positioning */
+        .player {
+            position: absolute;
+            text-align: center;
+            width: 90px;
+            transform: translateX(-50%);
+            cursor: move;
+            z-index: 10;
+            user-select: none;
+            touch-action: none;
+        }
+        
+        .player-circle {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            margin: 0 auto 5px;
+        }
+        
+        .player-home .player-circle {
+            background-color: #000;
+        }
+        
+        .player-away .player-circle {
+            background-color: #00356b;
+        }
+        
+        .player-name {
+            font-size: 11px;
+            color: white;
+            text-shadow: 1px 1px 1px black;
+            max-width: 90px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Substitutes section */
+        .substitutes {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .sub-team {
+            width: 48%;
+        }
+        
+        .sub-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 5px;
+            text-align: center;
+        }
+        
+        .home-sub-header {
+            background-color: #000;
+            color: white;
+        }
+        
+        .away-sub-header {
+            background-color: #00356b;
+            color: white;
+        }
+        
+        .sub-list {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        
+        .sub-player {
+            width: 50%;
+            margin-bottom: 5px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .sub-number {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            text-align: center;
+            color: white;
+            font-size: 12px;
+            line-height: 20px;
+            margin-right: 5px;
+        }
+        
+        .home-sub .sub-number {
+            background-color: #000;
+        }
+        
+        .away-sub .sub-number {
+            background-color: #00356b;
+        }
+        
+        #json-input {
+            width: 100%;
+            height: 200px;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+        
+        #update-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        
+        #update-btn:hover {
+            background-color: #45a049;
+        }
+
+        @media (max-width: 768px) {
+            .pitch {
+                height: 600px;
+            }
+            .player-name {
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Football Match Lineup & Tactical Board</h1>
+    <p>Enter JSON data for both teams to update the lineup visualization. <strong>Drag players to use as a tactical board!</strong></p>
+    <textarea id="json-input">
+{
+ "Home": "Fulham",
+ "Formation": "4-2-3-1",
+  "Goalkeeper": "1 Bernd Leno (C)",
+  "Defenders": ["21 Timothy Castagne", "5 Joachim Andersen", "3 Caleb Ughelumba", "33 Antonee Robinson"],
+  "Midfielders": {
+    "Defensive": ["18 Sander Berge", "16 Andreas Pereira"],
+    "Attacking": ["17 Alex Iwobi", "32 Emile Smith-Rowe", "22 Willian"]
+  },
+  "Forward": "7 Raul Jiménez",
+  "Substitutes": ["23 Simon Benda", "6 Harrison Reed", "9 Rodrigo Muniz Carvalho", "10 Tom Cairney", "11 Adama Traore", "15 Johan Cuenca", "24 Josh King", "30 Ryan Sessegnon", "47 Martial Godo"]
+}
+{
+"Away": "Spurs",
+  "Formation": "3-4-3",
+  "Goalkeeper": "1 Guglielmo Vicario",
+  "Defenders": ["24 Djed Spence", "17 Cristian Romero (C)", "33 Ben Davies"],
+  "Midfielders": ["13 Destiny Udogie", "30 Rodrigo Bentancur", "8 Yves Bissouma", "22 Brennan Johnson"],
+  "Forwards": ["19 Dominic Solanke", "11 Malo Tel", "14 Anthony Gray"],
+  "Substitutes": ["44 Dane Scarlett", "37 Micky van de Ven", "29 Pape Sarr", "28 Warren Odobert", "23 Pedro Porro", "15 Lucas Bergvall", "10 James Maddison", "7 Heung-Min Son", "31 Aidan Kinsky"]
+}
+    </textarea>
+    <button id="update-btn">Update Lineup</button>
+    
+    <div class="pitch-container" id="pitch-container">
+        <!-- Pitch content will be generated by JavaScript -->
+    </div>
+    
+    <script>
+        // Function to parse player name and number
+        function parsePlayer(playerString) {
+            const match = playerString.match(/^(\d+)\s+(.+?)(\s+\(C\))?$/);
+            if (match) {
+                return {
+                    number: match[1],
+                    name: match[2],
+                    captain: !!match[3]
+                };
+            }
+            return { number: '0', name: playerString, captain: false };
+        }
+        
+        // Function to parse formation
+        function parseFormation(formation) {
+            return formation.split('-').map(Number);
+        }
+        
+        // Function to create player element
+        function createPlayerElement(player, position, isHome) {
+            const playerDiv = document.createElement('div');
+            playerDiv.className = `player player-${isHome ? 'home' : 'away'}`;
+            playerDiv.style.left = position.x + '%';
+            
+            if (isHome) {
+                playerDiv.style.bottom = position.y + '%';
+            } else {
+                playerDiv.style.top = position.y + '%';
+            }
+            
+            const circleDiv = document.createElement('div');
+            circleDiv.className = 'player-circle';
+            circleDiv.textContent = player.number;
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'player-name';
+            nameDiv.textContent = player.captain ? player.name + " (C)" : player.name;
+            
+            playerDiv.appendChild(circleDiv);
+            playerDiv.appendChild(nameDiv);
+            
+            return playerDiv;
+        }
+        
+        // Function to calculate positions based on formation
+        function calculatePositions(formation, isHome) {
+            const positions = [];
+            const layers = formation.length;
+            
+            // GK position
+            positions.push({
+                x: 50,
+                y: 10,
+                role: 'GK'
+            });
+            
+            // Calculate positions for each layer
+            let currentLayerIndex = 0;
+            formation.forEach((playersInLayer, idx) => {
+                // Space players evenly in their layer
+                const spacing = 100 / (playersInLayer + 1);
+                const layerPosition = isHome 
+                    ? 20 + (currentLayerIndex * Math.min(35 / layers, 15)) 
+                    : 20 + (idx * Math.min(30 / layers, 10));
+                
+                for (let i = 0; i < playersInLayer; i++) {
+                    positions.push({
+                        x: spacing * (i + 1),
+                        y: layerPosition,
+                        role: 'outfield'
+                    });
+                }
+                currentLayerIndex++;
+            });
+            
+            return positions;
+        }
+        
+        // Function to flatten player arrays for different formations
+        function flattenPlayers(teamData) {
+            const players = [];
+            
+            // Add goalkeeper
+            if (teamData.Goalkeeper) {
+                const gk = parsePlayer(teamData.Goalkeeper);
+                players.push(gk);
+            }
+            
+            // Add defenders
+            if (Array.isArray(teamData.Defenders)) {
+                teamData.Defenders.forEach(defender => {
+                    players.push(parsePlayer(defender));
+                });
+            }
+            
+            // Add midfielders (handling different structures)
+            if (teamData.Midfielders) {
+                if (Array.isArray(teamData.Midfielders)) {
+                    // Simple array of midfielders
+                    teamData.Midfielders.forEach(mid => {
+                        players.push(parsePlayer(mid));
+                    });
+                } else {
+                    // Object with different types of midfielders
+                    for (const key in teamData.Midfielders) {
+                        const mids = teamData.Midfielders[key];
+                        if (Array.isArray(mids)) {
+                            mids.forEach(mid => {
+                                players.push(parsePlayer(mid));
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Add forwards
+            if (teamData.Forwards) {
+                if (Array.isArray(teamData.Forwards)) {
+                    teamData.Forwards.forEach(forward => {
+                        players.push(parsePlayer(forward));
+                    });
+                }
+            } else if (teamData.Forward) {
+                // Single forward
+                players.push(parsePlayer(teamData.Forward));
+            }
+            
+            return players;
+        }
+        
+        // Function to generate subs elements
+        function generateSubs(subs, isHome) {
+            const subsDiv = document.createElement('div');
+            subsDiv.className = 'sub-team';
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = `sub-header ${isHome ? 'home' : 'away'}-sub-header`;
+            headerDiv.textContent = `${isHome ? 'Home' : 'Away'} Substitutes`;
+            
+            const listDiv = document.createElement('div');
+            listDiv.className = 'sub-list';
+            
+            subs.forEach(sub => {
+                const player = parsePlayer(sub);
+                
+                const subDiv = document.createElement('div');
+                subDiv.className = `sub-player ${isHome ? 'home' : 'away'}-sub`;
+                
+                const numSpan = document.createElement('span');
+                numSpan.className = 'sub-number';
+                numSpan.textContent = player.number;
+                
+                subDiv.appendChild(numSpan);
+                subDiv.appendChild(document.createTextNode(' ' + player.name));
+                
+                listDiv.appendChild(subDiv);
+            });
+            
+            subsDiv.appendChild(headerDiv);
+            subsDiv.appendChild(listDiv);
+            
+            return subsDiv;
+        }
+        
+        // Main function to render the lineup
+        function renderLineup(jsonData) {
+            try {
+                // Parse JSON input
+                const dataArray = jsonData.trim().split(/\n*}\s*{/).map((part, index) => {
+                    // Add back the braces that were removed by the split
+                    if (index === 0) return part + '}';
+                    if (index === 1) return '{' + part;
+                    return '{' + part + '}';
+                });
+                
+                const homeData = JSON.parse(dataArray[0]);
+                const awayData = JSON.parse(dataArray[1]);
+                
+                // Get team names
+                const homeName = homeData.Home || 'Home Team';
+                const awayName = awayData.Away || 'Away Team';
+                
+                // Parse formations
+                const homeFormation = parseFormation(homeData.Formation);
+                const awayFormation = parseFormation(awayData.Formation);
+                
+                // Get all players
+                const homePlayers = flattenPlayers(homeData);
+                const awayPlayers = flattenPlayers(awayData);
+                
+                // Calculate positions
+                const homePositions = calculatePositions(homeFormation, true);
+                const awayPositions = calculatePositions(awayFormation, false);
+                
+                // Create pitch container
+                const container = document.getElementById('pitch-container');
+                container.innerHTML = '';
+                
+                // Create away team header
+                const awayHeader = document.createElement('div');
+                awayHeader.className = 'team-header team-away';
+                awayHeader.innerHTML = `<span class="team-name">${awayName}</span><span class="formation">${awayData.Formation}</span>`;
+                container.appendChild(awayHeader);
+                
+                // Create pitch
+                const pitch = document.createElement('div');
+                pitch.className = 'pitch';
+                
+                // Add pitch markings
+                pitch.innerHTML = `
+                    <div class="center-line"></div>
+                    <div class="center-circle"></div>
+                    <div class="penalty-box-away"></div>
+                    <div class="penalty-box-home"></div>
+                    <div class="goal-box-away"></div>
+                    <div class="goal-box-home"></div>
+                `;
+                
+                // Add players to pitch
+                homePlayers.forEach((player, index) => {
+                    if (index < homePositions.length) {
+                        const pos = homePositions[index];
+                        pitch.appendChild(createPlayerElement(player, pos, true));
+                    }
+                });
+                
+                awayPlayers.forEach((player, index) => {
+                    if (index < awayPositions.length) {
+                        const pos = awayPositions[index];
+                        pitch.appendChild(createPlayerElement(player, pos, false));
+                    }
+                });
+                
+                // Create home team header
+                const homeHeader = document.createElement('div');
+                homeHeader.className = 'team-header team-home';
+                homeHeader.innerHTML = `<span class="team-name">${homeName}</span><span class="formation">${homeData.Formation}</span>`;
+                pitch.appendChild(homeHeader);
+                
+                container.appendChild(pitch);
+                
+                // Create substitutes section
+                const subsContainer = document.createElement('div');
+                subsContainer.className = 'substitutes';
+                
+                if (homeData.Substitutes && homeData.Substitutes.length) {
+                    subsContainer.appendChild(generateSubs(homeData.Substitutes, true));
+                }
+                
+                if (awayData.Substitutes && awayData.Substitutes.length) {
+                    subsContainer.appendChild(generateSubs(awayData.Substitutes, false));
+                }
+                
+                container.appendChild(subsContainer);
+                
+            } catch (error) {
+                console.error('Error rendering lineup:', error);
+                alert('Error parsing JSON data. Please check the format and try again.');
+            }
+        }
+        
+        // Make players draggable
+        function setupDraggablePlayers() {
+            const pitch = document.querySelector('.pitch');
+            const players = document.querySelectorAll('.player');
+            
+            players.forEach(player => {
+                // Variables for dragging
+                let isDragging = false;
+                let startX, startY;
+                let originalLeft, originalTop, originalBottom;
+                let isHomeTeam;
+                
+                // Check if player is home or away
+                isHomeTeam = player.classList.contains('player-home');
+                
+                // Mouse down event
+                player.addEventListener('mousedown', startDrag);
+                // Touch events for mobile
+                player.addEventListener('touchstart', handleTouchStart, { passive: false });
+                
+                function startDrag(e) {
+                    e.preventDefault();
+                    isDragging = true;
+                    
+                    // Store original positions
+                    originalLeft = parseFloat(player.style.left);
+                    if (isHomeTeam) {
+                        originalBottom = parseFloat(player.style.bottom);
+                    } else {
+                        originalTop = parseFloat(player.style.top);
+                    }
+                    
+                    // Get starting position
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    
+                    // Add global event listeners
+                    document.addEventListener('mousemove', drag);
+                    document.addEventListener('mouseup', stopDrag);
+                    
+                    // Increase z-index to bring to front while dragging
+                    player.style.zIndex = '100';
+                }
+                
+                function drag(e) {
+                    if (!isDragging) return;
+                    
+                    // Calculate movement delta
+                    const deltaX = e.clientX - startX;
+                    const deltaY = e.clientY - startY;
+                    
+                    // Convert movement to percentage of pitch width/height
+                    const pitchRect = pitch.getBoundingClientRect();
+                    const deltaXPercent = (deltaX / pitchRect.width) * 100;
+                    const deltaYPercent = (deltaY / pitchRect.height) * 100;
+                    
+                    // Apply movement
+                    const newLeft = originalLeft + deltaXPercent;
+                    player.style.left = newLeft + '%';
+                    
+                    if (isHomeTeam) {
+                        // For home team, bottom property is used
+                        const newBottom = originalBottom - deltaYPercent;
+                        player.style.bottom = newBottom + '%';
+                    } else {
+                        // For away team, top property is used
+                        const newTop = originalTop + deltaYPercent;
+                        player.style.top = newTop + '%';
+                    }
+                }
+                
+                function stopDrag() {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    
+                    // Remove global event listeners
+                    document.removeEventListener('mousemove', drag);
+                    document.removeEventListener('mouseup', stopDrag);
+                    
+                    // Reset z-index
+                    player.style.zIndex = '10';
+                }
+                
+                // Touch event handlers
+                function handleTouchStart(e) {
+                    e.preventDefault(); // Prevent scrolling on touch
+                    
+                    const touch = e.touches[0];
+                    
+                    // Store original positions
+                    originalLeft = parseFloat(player.style.left);
+                    if (isHomeTeam) {
+                        originalBottom = parseFloat(player.style.bottom);
+                    } else {
+                        originalTop = parseFloat(player.style.top);
+                    }
+                    
+                    // Get starting position
+                    startX = touch.clientX;
+                    startY = touch.clientY;
+                    
+                    // Add touch event listeners
+                    player.addEventListener('touchmove', handleTouchMove, { passive: false });
+                    player.addEventListener('touchend', handleTouchEnd);
+                    
+                    // Increase z-index to bring to front while dragging
+                    player.style.zIndex = '100';
+                }
+                
+                function handleTouchMove(e) {
+                    e.preventDefault(); // Prevent scrolling on touch
+                    
+                    const touch = e.touches[0];
+                    
+                    // Calculate movement delta
+                    const deltaX = touch.clientX - startX;
+                    const deltaY = touch.clientY - startY;
+                    
+                    // Convert movement to percentage of pitch width/height
+                    const pitchRect = pitch.getBoundingClientRect();
+                    const deltaXPercent = (deltaX / pitchRect.width) * 100;
+                    const deltaYPercent = (deltaY / pitchRect.height) * 100;
+                    
+                    // Apply movement
+                    const newLeft = originalLeft + deltaXPercent;
+                    player.style.left = newLeft + '%';
+                    
+                    if (isHomeTeam) {
+                        // For home team, bottom property is used
+                        const newBottom = originalBottom - deltaYPercent;
+                        player.style.bottom = newBottom + '%';
+                    } else {
+                        // For away team, top property is used
+                        const newTop = originalTop + deltaYPercent;
+                        player.style.top = newTop + '%';
+                    }
+                }
+                
+                function handleTouchEnd() {
+                    // Remove touch event listeners
+                    player.removeEventListener('touchmove', handleTouchMove);
+                    player.removeEventListener('touchend', handleTouchEnd);
+                    
+                    // Reset z-index
+                    player.style.zIndex = '10';
+                }
+            });
+        }
+        
+        // Initial render
+        document.addEventListener('DOMContentLoaded', () => {
+            renderLineup(document.getElementById('json-input').value);
+            
+            // Setup draggable players once the lineup is rendered
+            setTimeout(setupDraggablePlayers, 100);
+            
+            // Add event listener for the update button
+            document.getElementById('update-btn').addEventListener('click', () => {
+                renderLineup(document.getElementById('json-input').value);
+                
+                // Setup draggable players again after updating the lineup
+                setTimeout(setupDraggablePlayers, 100);
+            });
+        });
+    </script>
+</body>
+</html>
