@@ -192,6 +192,7 @@
             font-size: 14px;
             display: flex;
             align-items: center;
+            cursor: pointer;
         }
         
         .sub-number {
@@ -235,6 +236,143 @@
         #update-btn:hover {
             background-color: #45a049;
         }
+        
+        /* Styles for the substitution feature */
+        .player.selected, .sub-player.selected {
+            box-shadow: 0 0 0 3px #ff9900;
+        }
+        
+        .player.selected .player-circle {
+            border: 2px solid #ff9900;
+        }
+
+        .completed-subs {
+            margin-top: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .completed-subs-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .subs-counter {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+        }
+        
+        .home-subs-counter {
+            background-color: #000;
+        }
+        
+        .away-subs-counter {
+            background-color: #00356b;
+        }
+        
+        .sub-list-content {
+            width: 100%;
+        }
+        
+        .sub-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .sub-item:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .sub-item.pending {
+            border-left: 4px solid #ff9900;
+        }
+        
+        .sub-item.reversed {
+            background-color: #f5f5f5;
+            color: #999;
+            text-decoration: line-through;
+        }
+        
+        .sub-item .sub-actions {
+            visibility: hidden;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        .sub-item:hover .sub-actions {
+            visibility: visible;
+        }
+        
+        .sub-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            margin-left: 5px;
+            color: #666;
+            font-size: 18px;
+        }
+        
+        .sub-action-btn:hover {
+            color: #000;
+        }
+        
+        .sub-out {
+            color: #d32f2f;
+        }
+        
+        .sub-in {
+            color: #388e3c;
+        }
+        
+        .sub-arrow {
+            color: #d32f2f;
+            margin: 0 5px;
+        }
+        
+        .sub-time {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .confirm-btns {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+        
+        .confirm-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+        
+        .confirm-all-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .reset-all-btn {
+            background-color: #f44336;
+            color: white;
+        }
 
         @media (max-width: 768px) {
             .pitch {
@@ -248,7 +386,7 @@
 </head>
 <body>
     <h1>Football Match Lineup & Tactical Board</h1>
-    <p>Enter JSON data for both teams to update the lineup visualization. <strong>Drag players to use as a tactical board!</strong></p>
+    <p>Enter JSON data for both teams to update the lineup visualization. <strong>Drag players to use as a tactical board!</strong> Click on a player and then a substitute to make a substitution (max 5 per team).</p>
     <textarea id="json-input">
 {
  "Home": "Fulham",
@@ -279,6 +417,23 @@
     </div>
     
     <script>
+        // Substitution state variables
+        let selectedPlayerElement = null;
+        let selectedPlayerData = null;
+        let homeSubsCount = 0;
+        let awaySubsCount = 0;
+        let completedSubs = {
+            home: [],
+            away: []
+        };
+        let pendingSubs = {
+            home: [],
+            away: []
+        };
+        // Track substituted players so we can reverse them
+        let substitutedPlayers = [];
+        const MAX_SUBS = 5;
+        
         // Function to parse player name and number
         function parsePlayer(playerString) {
             const match = playerString.match(/^(\d+)\s+(.+?)(\s+\(C\))?$/);
@@ -319,6 +474,20 @@
             
             playerDiv.appendChild(circleDiv);
             playerDiv.appendChild(nameDiv);
+            
+            playerDiv.dataset.playerNumber = player.number;
+            playerDiv.dataset.playerName = player.name;
+            playerDiv.dataset.isHome = isHome;
+            playerDiv.dataset.isCaptain = player.captain;
+            
+            // Add click handler for player selection (with small delay to distinguish from drag)
+            playerDiv.addEventListener('click', function(e) {
+                e.stopPropagation();
+                // Only handle as a click if we didn't start dragging
+                if (!isDragging) {
+                    handlePlayerSelection(playerDiv, true);
+                }
+            });
             
             return playerDiv;
         }
@@ -416,7 +585,7 @@
             
             const headerDiv = document.createElement('div');
             headerDiv.className = `sub-header ${isHome ? 'home' : 'away'}-sub-header`;
-            headerDiv.textContent = `${isHome ? 'Home' : 'Away'} Substitutes`;
+            headerDiv.innerHTML = `${isHome ? 'Home' : 'Away'} Substitutes <span class="subs-counter ${isHome ? 'home' : 'away'}-subs-counter">${isHome ? homeSubsCount : awaySubsCount}/${MAX_SUBS}</span>`;
             
             const listDiv = document.createElement('div');
             listDiv.className = 'sub-list';
@@ -431,8 +600,17 @@
                 numSpan.className = 'sub-number';
                 numSpan.textContent = player.number;
                 
+                subDiv.dataset.playerNumber = player.number;
+                subDiv.dataset.playerName = player.name;
+                subDiv.dataset.isHome = isHome;
+                
                 subDiv.appendChild(numSpan);
                 subDiv.appendChild(document.createTextNode(' ' + player.name));
+                
+                // Add click handler for substitution
+                subDiv.addEventListener('click', function(e) {
+                    handlePlayerSelection(subDiv, false);
+                });
                 
                 listDiv.appendChild(subDiv);
             });
@@ -443,9 +621,429 @@
             return subsDiv;
         }
         
+        // Function to handle player selection for substitution
+        function handlePlayerSelection(element, isOnField) {
+            const isHome = element.dataset.isHome === 'true';
+            
+            // If we're already over the substitution limit for this team
+            const currentSubsCount = isHome ? homeSubsCount : awaySubsCount;
+            
+            // If clicking an already selected player, deselect it
+            if (selectedPlayerElement === element) {
+                element.classList.remove('selected');
+                selectedPlayerElement = null;
+                selectedPlayerData = null;
+                return;
+            }
+            
+            // If no player is selected yet, select this one (only if it's on the field)
+            if (!selectedPlayerElement && isOnField) {
+                element.classList.add('selected');
+                selectedPlayerElement = element;
+                selectedPlayerData = {
+                    number: element.dataset.playerNumber,
+                    name: element.dataset.playerName,
+                    isHome: isHome,
+                    isCaptain: element.dataset.isCaptain === 'true'
+                };
+                return;
+            }
+            
+            // If a player is already selected and this is a sub player from the same team
+            if (selectedPlayerElement && !isOnField && isHome === (selectedPlayerData.isHome)) {
+                // Check if we've reached the substitution limit
+                if (currentSubsCount >= MAX_SUBS) {
+                    alert(`Maximum substitutions (${MAX_SUBS}) reached for this team.`);
+                    // Deselect current player
+                    selectedPlayerElement.classList.remove('selected');
+                    selectedPlayerElement = null;
+                    selectedPlayerData = null;
+                    return;
+                }
+                
+                // Perform the substitution
+                performSubstitution(selectedPlayerElement, element);
+                return;
+            }
+            
+            // If we get here, invalid selection, clear current selection
+            if (selectedPlayerElement) {
+                selectedPlayerElement.classList.remove('selected');
+            }
+            
+            // Select new element if it's on field
+            if (isOnField) {
+                element.classList.add('selected');
+                selectedPlayerElement = element;
+                selectedPlayerData = {
+                    number: element.dataset.playerNumber,
+                    name: element.dataset.playerName,
+                    isHome: isHome,
+                    isCaptain: element.dataset.isCaptain === 'true'
+                };
+            } else {
+                selectedPlayerElement = null;
+                selectedPlayerData = null;
+            }
+        }
+        
+        // Function to perform a substitution
+        function performSubstitution(fieldPlayer, subPlayer) {
+            const isHome = fieldPlayer.dataset.isHome === 'true';
+            
+            // Get position of the field player
+            const position = {
+                x: parseFloat(fieldPlayer.style.left),
+                y: isHome ? parseFloat(fieldPlayer.style.bottom) : parseFloat(fieldPlayer.style.top)
+            };
+            
+            // Create new player data for the substitute
+            const newPlayer = {
+                number: subPlayer.dataset.playerNumber,
+                name: subPlayer.dataset.playerName,
+                captain: fieldPlayer.dataset.isCaptain === 'true'
+            };
+            
+            // Get the outgoing player's details
+            const outPlayer = {
+                number: fieldPlayer.dataset.playerNumber,
+                name: fieldPlayer.dataset.playerName,
+                captain: fieldPlayer.dataset.isCaptain === 'true'
+            };
+            
+            // Create substitution record
+            const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const substitution = {
+                in: newPlayer,
+                out: outPlayer,
+                time: timestamp,
+                position: position,
+                isPending: true,
+                id: Date.now().toString(), // Unique ID for this sub
+                isHome: isHome
+            };
+            
+            // Add to pending substitutions
+            if (isHome) {
+                pendingSubs.home.push(substitution);
+                homeSubsCount++;
+            } else {
+                pendingSubs.away.push(substitution);
+                awaySubsCount++;
+            }
+            
+            // Store the original player element and sub element for possible reversal
+            substitutedPlayers.push({
+                id: substitution.id,
+                fieldPlayer: fieldPlayer,
+                subPlayer: subPlayer,
+                newPlayerElement: null // Will be set after creation
+            });
+            
+            // Create the substituted player element
+            const newPlayerElement = createPlayerElement(newPlayer, position, isHome);
+            
+            // Store reference to the new player element
+            const playerIndex = substitutedPlayers.findIndex(p => p.id === substitution.id);
+            if (playerIndex !== -1) {
+                substitutedPlayers[playerIndex].newPlayerElement = newPlayerElement;
+            }
+            
+            // Replace the player on the field
+            fieldPlayer.parentNode.replaceChild(newPlayerElement, fieldPlayer);
+            
+            // Make the new player draggable
+            setupDraggablePlayer(newPlayerElement);
+            
+            // Hide the sub from the bench instead of removing
+            subPlayer.style.display = 'none';
+            
+            // Clear selection
+            selectedPlayerElement = null;
+            selectedPlayerData = null;
+            
+            // Update the substitutions display
+            updateSubstitutionsDisplay();
+            
+            // Update the substitution counter in the header
+            updateSubsCounter();
+        }
+        
+        // Function to reverse a substitution
+        function reverseSubstitution(subId) {
+            // Find the substitution record
+            const subIndex = substitutedPlayers.findIndex(s => s.id === subId);
+            
+            if (subIndex === -1) {
+                return; // Substitution not found
+            }
+            
+            const sub = substitutedPlayers[subIndex];
+            const isHome = sub.fieldPlayer.dataset.isHome === 'true';
+            
+            // Remove from pending subs
+            const pendingSubsList = isHome ? pendingSubs.home : pendingSubs.away;
+            const pendingIndex = pendingSubsList.findIndex(s => s.id === subId);
+            
+            if (pendingIndex !== -1) {
+                pendingSubsList.splice(pendingIndex, 1);
+                
+                // Decrement the subs count
+                if (isHome) {
+                    homeSubsCount--;
+                } else {
+                    awaySubsCount--;
+                }
+            }
+            
+            // Put the original player back on the field
+            if (sub.newPlayerElement && sub.newPlayerElement.parentNode) {
+                sub.newPlayerElement.parentNode.replaceChild(sub.fieldPlayer, sub.newPlayerElement);
+            }
+            
+            // Make the original player draggable again
+            setupDraggablePlayer(sub.fieldPlayer);
+            
+            // Show the sub on the bench again
+            if (sub.subPlayer) {
+                sub.subPlayer.style.display = '';
+            }
+            
+            // Remove from substituted players
+            substitutedPlayers.splice(subIndex, 1);
+            
+            // Update the displays
+            updateSubstitutionsDisplay();
+            updateSubsCounter();
+        }
+        
+        // Function to confirm all pending substitutions
+        function confirmAllSubstitutions() {
+            // Move all pending subs to completed subs
+            pendingSubs.home.forEach(sub => {
+                completedSubs.home.push(sub);
+                sub.isPending = false;
+            });
+            
+            pendingSubs.away.forEach(sub => {
+                completedSubs.away.push(sub);
+                sub.isPending = false;
+            });
+            
+            // Clear pending subs
+            pendingSubs.home = [];
+            pendingSubs.away = [];
+            
+            // Clear substituted players array as they're now permanent
+            substitutedPlayers = [];
+            
+            // Update the display
+            updateSubstitutionsDisplay();
+        }
+        
+        // Function to update substitution counters
+        function updateSubsCounter() {
+            const homeHeader = document.querySelector('.home-sub-header');
+            const awayHeader = document.querySelector('.away-sub-header');
+            
+            if (homeHeader) {
+                homeHeader.innerHTML = `Home Substitutes <span class="subs-counter home-subs-counter">${homeSubsCount}/${MAX_SUBS}</span>`;
+            }
+            
+            if (awayHeader) {
+                awayHeader.innerHTML = `Away Substitutes <span class="subs-counter away-subs-counter">${awaySubsCount}/${MAX_SUBS}</span>`;
+            }
+        }
+        
+        // Function to update the substitutions display
+        function updateSubstitutionsDisplay() {
+            // Check if the completed substitutions container exists, create if not
+            let subsContainer = document.getElementById('completed-subs');
+            if (!subsContainer) {
+                subsContainer = document.createElement('div');
+                subsContainer.id = 'completed-subs';
+                subsContainer.className = 'completed-subs';
+                document.getElementById('pitch-container').appendChild(subsContainer);
+            }
+            
+            // Clear the container
+            subsContainer.innerHTML = '';
+            
+            // Create home team substitutions section
+            const homeSubsSection = document.createElement('div');
+            homeSubsSection.className = 'completed-subs-section';
+            
+            const homeHeader = document.createElement('div');
+            homeHeader.className = 'completed-subs-header';
+            homeHeader.innerHTML = `<span>Home Team Substitutions</span> <span class="subs-counter home-subs-counter">${homeSubsCount}/${MAX_SUBS}</span>`;
+            homeSubsSection.appendChild(homeHeader);
+            
+            const homeSubsList = document.createElement('div');
+            homeSubsList.className = 'sub-list-content';
+            
+            // Add pending home substitutions
+            if (pendingSubs.home.length > 0) {
+                pendingSubs.home.forEach(sub => {
+                    const subItem = document.createElement('div');
+                    subItem.className = 'sub-item pending';
+                    subItem.dataset.subId = sub.id;
+                    
+                    const subContent = document.createElement('div');
+                    subContent.innerHTML = `<span class="sub-out">${sub.out.number} ${sub.out.name}</span> <span class="sub-arrow">↓</span> <span class="sub-in">${sub.in.number} ${sub.in.name}</span>`;
+                    
+                    const subTime = document.createElement('div');
+                    subTime.className = 'sub-time';
+                    subTime.textContent = sub.time;
+                    
+                    const subActions = document.createElement('div');
+                    subActions.className = 'sub-actions';
+                    
+                    const reverseBtn = document.createElement('button');
+                    reverseBtn.className = 'sub-action-btn';
+                    reverseBtn.innerHTML = '↩️';
+                    reverseBtn.title = 'Reverse Substitution';
+                    reverseBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        reverseSubstitution(sub.id);
+                    };
+                    
+                    subActions.appendChild(reverseBtn);
+                    subItem.appendChild(subContent);
+                    subItem.appendChild(subTime);
+                    subItem.appendChild(subActions);
+                    
+                    homeSubsList.appendChild(subItem);
+                });
+            }
+            
+            // Add completed home substitutions
+            if (completedSubs.home.length > 0) {
+                completedSubs.home.forEach(sub => {
+                    const subItem = document.createElement('div');
+                    subItem.className = 'sub-item';
+                    subItem.innerHTML = `
+                        <div><span class="sub-out">${sub.out.number} ${sub.out.name}</span> <span class="sub-arrow">↓</span> <span class="sub-in">${sub.in.number} ${sub.in.name}</span></div>
+                        <div class="sub-time">${sub.time}</div>
+                    `;
+                    homeSubsList.appendChild(subItem);
+                });
+            } 
+            
+            // Show message if no substitutions
+            if (pendingSubs.home.length === 0 && completedSubs.home.length === 0) {
+                homeSubsList.innerHTML = '<div class="no-subs">No substitutions made yet</div>';
+            }
+            
+            homeSubsSection.appendChild(homeSubsList);
+            subsContainer.appendChild(homeSubsSection);
+            
+            // Create away team substitutions section
+            const awaySubsSection = document.createElement('div');
+            awaySubsSection.className = 'completed-subs-section';
+            awaySubsSection.style.marginTop = '15px';
+            
+            const awayHeader = document.createElement('div');
+            awayHeader.className = 'completed-subs-header';
+            awayHeader.innerHTML = `<span>Away Team Substitutions</span> <span class="subs-counter away-subs-counter">${awaySubsCount}/${MAX_SUBS}</span>`;
+            awaySubsSection.appendChild(awayHeader);
+            
+            const awaySubsList = document.createElement('div');
+            awaySubsList.className = 'sub-list-content';
+            
+            // Add pending away substitutions
+            if (pendingSubs.away.length > 0) {
+                pendingSubs.away.forEach(sub => {
+                    const subItem = document.createElement('div');
+                    subItem.className = 'sub-item pending';
+                    subItem.dataset.subId = sub.id;
+                    
+                    const subContent = document.createElement('div');
+                    subContent.innerHTML = `<span class="sub-out">${sub.out.number} ${sub.out.name}</span> <span class="sub-arrow">↓</span> <span class="sub-in">${sub.in.number} ${sub.in.name}</span>`;
+                    
+                    const subTime = document.createElement('div');
+                    subTime.className = 'sub-time';
+                    subTime.textContent = sub.time;
+                    
+                    const subActions = document.createElement('div');
+                    subActions.className = 'sub-actions';
+                    
+                    const reverseBtn = document.createElement('button');
+                    reverseBtn.className = 'sub-action-btn';
+                    reverseBtn.innerHTML = '↩️';
+                    reverseBtn.title = 'Reverse Substitution';
+                    reverseBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        reverseSubstitution(sub.id);
+                    };
+                    
+                    subActions.appendChild(reverseBtn);
+                    subItem.appendChild(subContent);
+                    subItem.appendChild(subTime);
+                    subItem.appendChild(subActions);
+                    
+                    awaySubsList.appendChild(subItem);
+                });
+            }
+            
+            // Add completed away substitutions
+            if (completedSubs.away.length > 0) {
+                completedSubs.away.forEach(sub => {
+                    const subItem = document.createElement('div');
+                    subItem.className = 'sub-item';
+                    subItem.innerHTML = `
+                        <div><span class="sub-out">${sub.out.number} ${sub.out.name}</span> <span class="sub-arrow">↓</span> <span class="sub-in">${sub.in.number} ${sub.in.name}</span></div>
+                        <div class="sub-time">${sub.time}</div>
+                    `;
+                    awaySubsList.appendChild(subItem);
+                });
+            }
+            
+            // Show message if no substitutions
+            if (pendingSubs.away.length === 0 && completedSubs.away.length === 0) {
+                awaySubsList.innerHTML = '<div class="no-subs">No substitutions made yet</div>';
+            }
+            
+            awaySubsSection.appendChild(awaySubsList);
+            subsContainer.appendChild(awaySubsSection);
+            
+            // Add confirm buttons if there are pending subs
+            if (pendingSubs.home.length > 0 || pendingSubs.away.length > 0) {
+                const confirmBtnsDiv = document.createElement('div');
+                confirmBtnsDiv.className = 'confirm-btns';
+                
+                const confirmAllBtn = document.createElement('button');
+                confirmAllBtn.className = 'confirm-btn confirm-all-btn';
+                confirmAllBtn.textContent = 'Confirm All Substitutions';
+                confirmAllBtn.onclick = confirmAllSubstitutions;
+                
+                const resetAllBtn = document.createElement('button');
+                resetAllBtn.className = 'confirm-btn reset-all-btn';
+                resetAllBtn.textContent = 'Reset All Substitutions';
+                resetAllBtn.onclick = () => {
+                    // Reverse all pending substitutions
+                    const allSubs = [...substitutedPlayers];
+                    allSubs.forEach(sub => {
+                        reverseSubstitution(sub.id);
+                    });
+                };
+                
+                confirmBtnsDiv.appendChild(resetAllBtn);
+                confirmBtnsDiv.appendChild(confirmAllBtn);
+                subsContainer.appendChild(confirmBtnsDiv);
+            }
+        }
+        
         // Main function to render the lineup
         function renderLineup(jsonData) {
             try {
+                // Reset substitutions
+                homeSubsCount = 0;
+                awaySubsCount = 0;
+                completedSubs = {
+                    home: [],
+                    away: []
+                };
+                
                 // Parse JSON input
                 const dataArray = jsonData.trim().split(/\n*}\s*{/).map((part, index) => {
                     // Add back the braces that were removed by the split
@@ -534,157 +1132,183 @@
                 
                 container.appendChild(subsContainer);
                 
+                // Add empty completed substitutions container
+                updateSubstitutionsDisplay();
+                
+                // Clear selection state
+                selectedPlayerElement = null;
+                selectedPlayerData = null;
+                
             } catch (error) {
                 console.error('Error rendering lineup:', error);
                 alert('Error parsing JSON data. Please check the format and try again.');
             }
         }
         
-        // Make players draggable
-        function setupDraggablePlayers() {
+        // Global variable to track dragging state across functions
+        let isDragging = false;
+
+        // Function to setup a single draggable player
+        function setupDraggablePlayer(player) {
             const pitch = document.querySelector('.pitch');
+            
+            // Variables for dragging
+            let startX, startY;
+            let originalLeft, originalTop, originalBottom;
+            let isHomeTeam;
+            
+            // Check if player is home or away
+            isHomeTeam = player.classList.contains('player-home');
+            
+            // Mouse down event
+            player.addEventListener('mousedown', startDrag);
+            // Touch events for mobile
+            player.addEventListener('touchstart', handleTouchStart, { passive: false });
+            
+            function startDrag(e) {
+                e.preventDefault();
+                isDragging = true;
+                
+                // Store original positions
+                originalLeft = parseFloat(player.style.left);
+                if (isHomeTeam) {
+                    originalBottom = parseFloat(player.style.bottom);
+                } else {
+                    originalTop = parseFloat(player.style.top);
+                }
+                
+                // Get starting position
+                startX = e.clientX;
+                startY = e.clientY;
+                
+                // Add global event listeners
+                document.addEventListener('mousemove', drag);
+                document.addEventListener('mouseup', stopDrag);
+                
+                // Increase z-index to bring to front while dragging
+                player.style.zIndex = '100';
+            }
+            
+            function drag(e) {
+                if (!isDragging) return;
+                
+                // Calculate movement delta
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                
+                // Convert movement to percentage of pitch width/height
+                const pitchRect = pitch.getBoundingClientRect();
+                const deltaXPercent = (deltaX / pitchRect.width) * 100;
+                const deltaYPercent = (deltaY / pitchRect.height) * 100;
+                
+                // Apply movement
+                const newLeft = originalLeft + deltaXPercent;
+                player.style.left = newLeft + '%';
+                
+                if (isHomeTeam) {
+                    // For home team, bottom property is used
+                    const newBottom = originalBottom - deltaYPercent;
+                    player.style.bottom = newBottom + '%';
+                } else {
+                    // For away team, top property is used
+                    const newTop = originalTop + deltaYPercent;
+                    player.style.top = newTop + '%';
+                }
+            }
+            
+            function stopDrag() {
+                if (!isDragging) return;
+                isDragging = false;
+                
+                // Remove global event listeners
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('mouseup', stopDrag);
+                
+                // Reset z-index
+                player.style.zIndex = '10';
+            }
+            
+            // Touch event handlers
+            function handleTouchStart(e) {
+                e.preventDefault(); // Prevent scrolling on touch
+                
+                const touch = e.touches[0];
+                
+                // Store original positions
+                originalLeft = parseFloat(player.style.left);
+                if (isHomeTeam) {
+                    originalBottom = parseFloat(player.style.bottom);
+                } else {
+                    originalTop = parseFloat(player.style.top);
+                }
+                
+                // Get starting position
+                startX = touch.clientX;
+                startY = touch.clientY;
+                
+                // Add touch event listeners
+                player.addEventListener('touchmove', handleTouchMove, { passive: false });
+                player.addEventListener('touchend', handleTouchEnd);
+                
+                // Increase z-index to bring to front while dragging
+                player.style.zIndex = '100';
+            }
+            
+            function handleTouchMove(e) {
+                e.preventDefault(); // Prevent scrolling on touch
+                
+                const touch = e.touches[0];
+                
+                // Calculate movement delta
+                const deltaX = touch.clientX - startX;
+                const deltaY = touch.clientY - startY;
+                
+                // Convert movement to percentage of pitch width/height
+                const pitchRect = pitch.getBoundingClientRect();
+                const deltaXPercent = (deltaX / pitchRect.width) * 100;
+                const deltaYPercent = (deltaY / pitchRect.height) * 100;
+                
+                // Apply movement
+                const newLeft = originalLeft + deltaXPercent;
+                player.style.left = newLeft + '%';
+                
+                if (isHomeTeam) {
+                    // For home team, bottom property is used
+                    const newBottom = originalBottom - deltaYPercent;
+                    player.style.bottom = newBottom + '%';
+                } else {
+                    // For away team, top property is used
+                    const newTop = originalTop + deltaYPercent;
+                    player.style.top = newTop + '%';
+                }
+            }
+            
+            function handleTouchEnd() {
+                // Remove touch event listeners
+                player.removeEventListener('touchmove', handleTouchMove);
+                player.removeEventListener('touchend', handleTouchEnd);
+                
+                // Reset z-index
+                player.style.zIndex = '10';
+            }
+        }
+        
+        // Setup all draggable players
+        function setupDraggablePlayers() {
             const players = document.querySelectorAll('.player');
             
             players.forEach(player => {
-                // Variables for dragging
-                let isDragging = false;
-                let startX, startY;
-                let originalLeft, originalTop, originalBottom;
-                let isHomeTeam;
-                
-                // Check if player is home or away
-                isHomeTeam = player.classList.contains('player-home');
-                
-                // Mouse down event
-                player.addEventListener('mousedown', startDrag);
-                // Touch events for mobile
-                player.addEventListener('touchstart', handleTouchStart, { passive: false });
-                
-                function startDrag(e) {
-                    e.preventDefault();
-                    isDragging = true;
-                    
-                    // Store original positions
-                    originalLeft = parseFloat(player.style.left);
-                    if (isHomeTeam) {
-                        originalBottom = parseFloat(player.style.bottom);
-                    } else {
-                        originalTop = parseFloat(player.style.top);
+                setupDraggablePlayer(player);
+            });
+            
+            // Add event listener to clear selection when clicking on pitch
+            document.querySelector('.pitch').addEventListener('click', function(e) {
+                if (e.target.classList.contains('pitch')) {
+                    if (selectedPlayerElement) {
+                        selectedPlayerElement.classList.remove('selected');
+                        selectedPlayerElement = null;
+                        selectedPlayerData = null;
                     }
-                    
-                    // Get starting position
-                    startX = e.clientX;
-                    startY = e.clientY;
-                    
-                    // Add global event listeners
-                    document.addEventListener('mousemove', drag);
-                    document.addEventListener('mouseup', stopDrag);
-                    
-                    // Increase z-index to bring to front while dragging
-                    player.style.zIndex = '100';
-                }
-                
-                function drag(e) {
-                    if (!isDragging) return;
-                    
-                    // Calculate movement delta
-                    const deltaX = e.clientX - startX;
-                    const deltaY = e.clientY - startY;
-                    
-                    // Convert movement to percentage of pitch width/height
-                    const pitchRect = pitch.getBoundingClientRect();
-                    const deltaXPercent = (deltaX / pitchRect.width) * 100;
-                    const deltaYPercent = (deltaY / pitchRect.height) * 100;
-                    
-                    // Apply movement
-                    const newLeft = originalLeft + deltaXPercent;
-                    player.style.left = newLeft + '%';
-                    
-                    if (isHomeTeam) {
-                        // For home team, bottom property is used
-                        const newBottom = originalBottom - deltaYPercent;
-                        player.style.bottom = newBottom + '%';
-                    } else {
-                        // For away team, top property is used
-                        const newTop = originalTop + deltaYPercent;
-                        player.style.top = newTop + '%';
-                    }
-                }
-                
-                function stopDrag() {
-                    if (!isDragging) return;
-                    isDragging = false;
-                    
-                    // Remove global event listeners
-                    document.removeEventListener('mousemove', drag);
-                    document.removeEventListener('mouseup', stopDrag);
-                    
-                    // Reset z-index
-                    player.style.zIndex = '10';
-                }
-                
-                // Touch event handlers
-                function handleTouchStart(e) {
-                    e.preventDefault(); // Prevent scrolling on touch
-                    
-                    const touch = e.touches[0];
-                    
-                    // Store original positions
-                    originalLeft = parseFloat(player.style.left);
-                    if (isHomeTeam) {
-                        originalBottom = parseFloat(player.style.bottom);
-                    } else {
-                        originalTop = parseFloat(player.style.top);
-                    }
-                    
-                    // Get starting position
-                    startX = touch.clientX;
-                    startY = touch.clientY;
-                    
-                    // Add touch event listeners
-                    player.addEventListener('touchmove', handleTouchMove, { passive: false });
-                    player.addEventListener('touchend', handleTouchEnd);
-                    
-                    // Increase z-index to bring to front while dragging
-                    player.style.zIndex = '100';
-                }
-                
-                function handleTouchMove(e) {
-                    e.preventDefault(); // Prevent scrolling on touch
-                    
-                    const touch = e.touches[0];
-                    
-                    // Calculate movement delta
-                    const deltaX = touch.clientX - startX;
-                    const deltaY = touch.clientY - startY;
-                    
-                    // Convert movement to percentage of pitch width/height
-                    const pitchRect = pitch.getBoundingClientRect();
-                    const deltaXPercent = (deltaX / pitchRect.width) * 100;
-                    const deltaYPercent = (deltaY / pitchRect.height) * 100;
-                    
-                    // Apply movement
-                    const newLeft = originalLeft + deltaXPercent;
-                    player.style.left = newLeft + '%';
-                    
-                    if (isHomeTeam) {
-                        // For home team, bottom property is used
-                        const newBottom = originalBottom - deltaYPercent;
-                        player.style.bottom = newBottom + '%';
-                    } else {
-                        // For away team, top property is used
-                        const newTop = originalTop + deltaYPercent;
-                        player.style.top = newTop + '%';
-                    }
-                }
-                
-                function handleTouchEnd() {
-                    // Remove touch event listeners
-                    player.removeEventListener('touchmove', handleTouchMove);
-                    player.removeEventListener('touchend', handleTouchEnd);
-                    
-                    // Reset z-index
-                    player.style.zIndex = '10';
                 }
             });
         }
