@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Market Value History</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-moment/1.0.1/chartjs-adapter-moment.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .chart-container {
+            position: relative;
+            height: 60vh;
+            width: 100%;
+        }
+        .range-slider-container {
+            position: relative;
+            height: 100px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .range-chart-container {
+            width: 100%;
+            height: 50px;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .range-control {
+            position: absolute;
+            top: 0;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            box-sizing: border-box;
+            cursor: ew-resize;
+        }
+        .range-selection {
+            position: absolute;
+            top: 0;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.6);
+            border-left: 4px solid #2980b9;
+            border-right: 4px solid #2980b9;
+            box-sizing: border-box;
+        }
+        .range-overlay {
+            width: 100%;
+            height: 50px;
+            position: absolute;
+            top: 0;
+        }
+        .summary {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        .summary-item {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            width: 200px;
+            margin: 10px;
+        }
+        .summary-item h3 {
+            margin-top: 0;
+            color: #555;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        .summary-item p {
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .sub-info {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        #tooltip {
+            position: absolute;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            max-width: 250px;
+            z-index: 100;
+        }
+        .club-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+        .tooltip-label {
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Mario Balotelli - Market Value History</h1>
+        </div>
+        
+        <div class="chart-container">
+            <canvas id="marketValueChart"></canvas>
+        </div>
+        
+        <div class="range-slider-container">
+            <div class="range-chart-container">
+                <canvas id="rangeChart"></canvas>
+            </div>
+            <div class="range-selection" id="rangeSelection"></div>
+            <div class="range-control" id="leftHandle"></div>
+            <div class="range-control" id="rightHandle"></div>
+            <div class="range-overlay" id="rangeOverlay"></div>
+        </div>
+
+        <div id="tooltip"></div>
+        
+        <div class="summary">
+            <div class="summary-item">
+                <h3>Current Value</h3>
+                <p id="currentValue">€500k</p>
+                <div class="sub-info">Last updated: Dec 18, 2024</div>
+            </div>
+            <div class="summary-item">
+                <h3>Highest Value</h3>
+                <p id="highestValue">€32.00m</p>
+                <div class="sub-info">Achieved: Jun 24, 2012</div>
+            </div>
+            <div class="summary-item">
+                <h3>Current Club</h3>
+                <p id="currentClub">Genoa CFC</p>
+            </div>
+            <div class="summary-item">
+                <h3>Career Length</h3>
+                <p id="careerLength">17 years</p>
+                <div class="sub-info">Dec 2007 - Present</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Range control variables
+        let isDragging = false;
+        let dragType = null; // 'left', 'right', or 'selection'
+        let startDragX = 0;
+        let leftHandlePosition = 0;
+        let rightHandlePosition = 100;
+        let timelineWidth = 0;
+        
+        // Parse the data
+        const data = {
+            "list": [
+                {
+                    "x": 1198364400000,
+                    "y": 1000000,
+                    "mw": "€1.00m",
+                    "datum_mw": "Dec 23, 2007",
+                    "verein": "Inter Milan",
+                    "age": "17",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/46_1404733860.png?lm=1404733860"
+                },
+                {
+                    "x": 1203030000000,
+                    "y": 3000000,
+                    "mw": "€3.00m",
+                    "datum_mw": "Feb 15, 2008",
+                    "verein": "Inter Milan",
+                    "age": "17",
+                    "wappen": ""
+                },
+                {
+                    "x": 1215122400000,
+                    "y": 6500000,
+                    "mw": "€6.50m",
+                    "datum_mw": "Jul 4, 2008",
+                    "verein": "Inter Milan",
+                    "age": "17",
+                    "wappen": ""
+                },
+                {
+                    "x": 1233874800000,
+                    "y": 6000000,
+                    "mw": "€6.00m",
+                    "datum_mw": "Feb 6, 2009",
+                    "verein": "Inter Milan",
+                    "age": "18",
+                    "wappen": ""
+                },
+                {
+                    "x": 1249509600000,
+                    "y": 12000000,
+                    "mw": "€12.00m",
+                    "datum_mw": "Aug 6, 2009",
+                    "verein": "Inter Milan",
+                    "age": "18",
+                    "wappen": ""
+                },
+                {
+                    "x": 1264546800000,
+                    "y": 15000000,
+                    "mw": "€15.00m",
+                    "datum_mw": "Jan 27, 2010",
+                    "verein": "Inter Milan",
+                    "age": "19",
+                    "wappen": ""
+                },
+                {
+                    "x": 1280700000000,
+                    "y": 26000000,
+                    "mw": "€26.00m",
+                    "datum_mw": "Aug 2, 2010",
+                    "verein": "Inter Milan",
+                    "age": "19",
+                    "wappen": ""
+                },
+                {
+                    "x": 1296514800000,
+                    "y": 26000000,
+                    "mw": "€26.00m",
+                    "datum_mw": "Feb 1, 2011",
+                    "verein": "Manchester City",
+                    "age": "20",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/281_1467356275.png?lm=1467356275"
+                },
+                {
+                    "x": 1312754400000,
+                    "y": 24000000,
+                    "mw": "€24.00m",
+                    "datum_mw": "Aug 8, 2011",
+                    "verein": "Manchester City",
+                    "age": "20",
+                    "wappen": ""
+                },
+                {
+                    "x": 1328482800000,
+                    "y": 30000000,
+                    "mw": "€30.00m",
+                    "datum_mw": "Feb 6, 2012",
+                    "verein": "Manchester City",
+                    "age": "21",
+                    "wappen": ""
+                },
+                {
+                    "x": 1340488800000,
+                    "y": 32000000,
+                    "mw": "€32.00m",
+                    "datum_mw": "Jun 24, 2012",
+                    "verein": "Manchester City",
+                    "age": "21",
+                    "wappen": ""
+                },
+                {
+                    "x": 1359327600000,
+                    "y": 24000000,
+                    "mw": "€24.00m",
+                    "datum_mw": "Jan 28, 2013",
+                    "verein": "Manchester City",
+                    "age": "22",
+                    "wappen": ""
+                },
+                {
+                    "x": 1371592800000,
+                    "y": 30000000,
+                    "mw": "€30.00m",
+                    "datum_mw": "Jun 19, 2013",
+                    "verein": "AC Milan",
+                    "age": "22",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/5.png?lm=1605166627"
+                },
+                {
+                    "x": 1389049200000,
+                    "y": 30000000,
+                    "mw": "€30.00m",
+                    "datum_mw": "Jan 7, 2014",
+                    "verein": "AC Milan",
+                    "age": "23",
+                    "wappen": ""
+                },
+                {
+                    "x": 1405029600000,
+                    "y": 27000000,
+                    "mw": "€27.00m",
+                    "datum_mw": "Jul 11, 2014",
+                    "verein": "AC Milan",
+                    "age": "23",
+                    "wappen": ""
+                },
+                {
+                    "x": 1412460000000,
+                    "y": 25000000,
+                    "mw": "€25.00m",
+                    "datum_mw": "Oct 5, 2014",
+                    "verein": "Liverpool FC",
+                    "age": "24",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/31_1727777132.png?lm=1727777132"
+                },
+                {
+                    "x": 1423695600000,
+                    "y": 15000000,
+                    "mw": "€15.00m",
+                    "datum_mw": "Feb 12, 2015",
+                    "verein": "Liverpool FC",
+                    "age": "24",
+                    "wappen": ""
+                },
+                {
+                    "x": 1435701600000,
+                    "y": 11000000,
+                    "mw": "€11.00m",
+                    "datum_mw": "Jul 1, 2015",
+                    "verein": "Liverpool FC",
+                    "age": "24",
+                    "wappen": ""
+                },
+                {
+                    "x": 1451862000000,
+                    "y": 10000000,
+                    "mw": "€10.00m",
+                    "datum_mw": "Jan 4, 2016",
+                    "verein": "AC Milan",
+                    "age": "25",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/5.png?lm=1605166627"
+                },
+                {
+                    "x": 1459461600000,
+                    "y": 7000000,
+                    "mw": "€7.00m",
+                    "datum_mw": "Apr 1, 2016",
+                    "verein": "AC Milan",
+                    "age": "25",
+                    "wappen": ""
+                },
+                {
+                    "x": 1470002400000,
+                    "y": 6000000,
+                    "mw": "€6.00m",
+                    "datum_mw": "Aug 1, 2016",
+                    "verein": "Liverpool FC",
+                    "age": "25",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/31_1727777132.png?lm=1727777132"
+                },
+                {
+                    "x": 1477954800000,
+                    "y": 7500000,
+                    "mw": "€7.50m",
+                    "datum_mw": "Nov 1, 2016",
+                    "verein": "OGC Nice",
+                    "age": "26",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/417.png?lm=1408779490"
+                },
+                {
+                    "x": 1484521200000,
+                    "y": 9000000,
+                    "mw": "€9.00m",
+                    "datum_mw": "Jan 16, 2017",
+                    "verein": "OGC Nice",
+                    "age": "26",
+                    "wappen": ""
+                },
+                {
+                    "x": 1496268000000,
+                    "y": 15000000,
+                    "mw": "€15.00m",
+                    "datum_mw": "Jun 1, 2017",
+                    "verein": "OGC Nice",
+                    "age": "26",
+                    "wappen": ""
+                },
+                {
+                    "x": 1516748400000,
+                    "y": 22000000,
+                    "mw": "€22.00m",
+                    "datum_mw": "Jan 24, 2018",
+                    "verein": "OGC Nice",
+                    "age": "27",
+                    "wappen": ""
+                },
+                {
+                    "x": 1528063200000,
+                    "y": 24000000,
+                    "mw": "€24.00m",
+                    "datum_mw": "Jun 4, 2018",
+                    "verein": "OGC Nice",
+                    "age": "27",
+                    "wappen": ""
+                },
+                {
+                    "x": 1545001200000,
+                    "y": 20000000,
+                    "mw": "€20.00m",
+                    "datum_mw": "Dec 17, 2018",
+                    "verein": "OGC Nice",
+                    "age": "28",
+                    "wappen": ""
+                },
+                {
+                    "x": 1559512800000,
+                    "y": 20000000,
+                    "mw": "€20.00m",
+                    "datum_mw": "Jun 3, 2019",
+                    "verein": "Olympique Marseille",
+                    "age": "28",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/244.png?lm=1485642163"
+                },
+                {
+                    "x": 1576105200000,
+                    "y": 10000000,
+                    "mw": "€10.00m",
+                    "datum_mw": "Dec 12, 2019",
+                    "verein": "Brescia Calcio",
+                    "age": "29",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/19.png?lm=1511961167"
+                },
+                {
+                    "x": 1583190000000,
+                    "y": 7000000,
+                    "mw": "€7.00m",
+                    "datum_mw": "Mar 3, 2020",
+                    "verein": "Brescia Calcio",
+                    "age": "29",
+                    "wappen": ""
+                },
+                {
+                    "x": 1586296800000,
+                    "y": 5500000,
+                    "mw": "€5.50m",
+                    "datum_mw": "Apr 8, 2020",
+                    "verein": "Brescia Calcio",
+                    "age": "29",
+                    "wappen": ""
+                },
+                {
+                    "x": 1598306400000,
+                    "y": 3000000,
+                    "mw": "€3.00m",
+                    "datum_mw": "Aug 25, 2020",
+                    "verein": "Without Club",
+                    "age": "30",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/515.png?lm=1456997255"
+                },
+                {
+                    "x": 1613948400000,
+                    "y": 1500000,
+                    "mw": "€1.50m",
+                    "datum_mw": "Feb 22, 2021",
+                    "verein": "AC Monza",
+                    "age": "30",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/2919.png?lm=1562072734"
+                },
+                {
+                    "x": 1624485600000,
+                    "y": 1500000,
+                    "mw": "€1.50m",
+                    "datum_mw": "Jun 24, 2021",
+                    "verein": "AC Monza",
+                    "age": "30",
+                    "wappen": ""
+                },
+                {
+                    "x": 1633989600000,
+                    "y": 2000000,
+                    "mw": "€2.00m",
+                    "datum_mw": "Oct 12, 2021",
+                    "verein": "Adana Demirspor",
+                    "age": "31",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/3840.png?lm=1442129502"
+                },
+                {
+                    "x": 1641250800000,
+                    "y": 2200000,
+                    "mw": "€2.20m",
+                    "datum_mw": "Jan 4, 2022",
+                    "verein": "Adana Demirspor",
+                    "age": "31",
+                    "wappen": ""
+                },
+                {
+                    "x": 1648677600000,
+                    "y": 2300000,
+                    "mw": "€2.30m",
+                    "datum_mw": "Mar 31, 2022",
+                    "verein": "Adana Demirspor",
+                    "age": "31",
+                    "wappen": ""
+                },
+                {
+                    "x": 1654034400000,
+                    "y": 2800000,
+                    "mw": "€2.80m",
+                    "datum_mw": "Jun 1, 2022",
+                    "verein": "Adana Demirspor",
+                    "age": "31",
+                    "wappen": ""
+                },
+                {
+                    "x": 1668034800000,
+                    "y": 2000000,
+                    "mw": "€2.00m",
+                    "datum_mw": "Nov 10, 2022",
+                    "verein": "FC Sion",
+                    "age": "32",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/321_1689683207.png?lm=1689683207"
+                },
+                {
+                    "x": 1686088800000,
+                    "y": 1500000,
+                    "mw": "€1.50m",
+                    "datum_mw": "Jun 7, 2023",
+                    "verein": "FC Sion",
+                    "age": "32",
+                    "wappen": ""
+                },
+                {
+                    "x": 1695765600000,
+                    "y": 1200000,
+                    "mw": "€1.20m",
+                    "datum_mw": "Sep 27, 2023",
+                    "verein": "Adana Demirspor",
+                    "age": "33",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/3840.png?lm=1442129502"
+                },
+                {
+                    "x": 1703113200000,
+                    "y": 1000000,
+                    "mw": "€1.00m",
+                    "datum_mw": "Dec 21, 2023",
+                    "verein": "Adana Demirspor",
+                    "age": "33",
+                    "wappen": ""
+                },
+                {
+                    "x": 1710457200000,
+                    "y": 875000,
+                    "mw": "€875k",
+                    "datum_mw": "Mar 15, 2024",
+                    "verein": "Adana Demirspor",
+                    "age": "33",
+                    "wappen": ""
+                },
+                {
+                    "x": 1717106400000,
+                    "y": 650000,
+                    "mw": "€650k",
+                    "datum_mw": "May 31, 2024",
+                    "verein": "Adana Demirspor",
+                    "age": "33",
+                    "wappen": ""
+                },
+                {
+                    "x": 1729029600000,
+                    "y": 500000,
+                    "mw": "€500k",
+                    "datum_mw": "Oct 16, 2024",
+                    "verein": "Without Club",
+                    "age": "34",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/515.png?lm=1456997255"
+                },
+                {
+                    "x": 1734476400000,
+                    "y": 500000,
+                    "mw": "€500k",
+                    "datum_mw": "Dec 18, 2024",
+                    "verein": "Genoa CFC",
+                    "age": "34",
+                    "wappen": "https://tmssl.akamaized.net//images/wappen/profil/252.png?lm=1655305880"
+                }
+            ],
+            "current": "€500k",
+            "highest": "€32.00m",
+            "highest_date": "Jun 24, 2012",
+            "last_change": "Dec 18, 2024"
+        };
+        
+        // Set summary data
+        document.getElementById('currentValue').textContent = data.current;
+        document.getElementById('highestValue').textContent = data.highest;
+        document.getElementById('currentClub').textContent = data.list[data.list.length - 1].verein;
+        
+        // Calculate career length
+        const firstDate = new Date(data.list[0].x);
+        const lastDate = new Date(data.list[data.list.length - 1].x);
+        const years = lastDate.getFullYear() - firstDate.getFullYear();
+        document.getElementById('careerLength').textContent = `${years} years`;
+        
+        // Process data for Chart.js
+        const chartData = {
+            labels: data.list.map(item => new Date(item.x)),
+            datasets: [{
+                label: 'Market Value',
+                data: data.list.map(item => ({
+                    x: new Date(item.x),
+                    y: item.y / 1000000, // Convert to millions for better display
+                    mw: item.mw,
+                    club: item.verein,
+                    date: item.datum_mw,
+                    age: item.age,
+                    logo: item.wappen
+                })),
+                borderColor: '#2980b9',
+                backgroundColor: 'rgba(41, 128, 185, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0 // We'll add custom points
+            }]
+        };
+        
+        // Create the tooltip
+        const tooltip = document.getElementById('tooltip');
+        
+        // Set up Chart.js
+        const ctx = document.getElementById('marketValueChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'year',
+                            displayFormats: {
+                                year: 'yyyy'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Year'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Market Value (€ millions)'
+                        },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: false // Disable the default tooltip
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'nearest'
+                }
+            }
+        });
+        
+        // Pre-load all logo images to avoid CORS issues and ensure they're ready
+        const clubLogos = [];
+        const loadLogos = async () => {
+            const logoPromises = data.list.map((item, index) => {
+                return new Promise((resolve) => {
+                    if (item.wappen && item.wappen.trim() !== '') {
+                        const img = new Image();
+                        img.crossOrigin = "Anonymous";  // Handle CORS
+                        img.onload = () => {
+                            clubLogos[index] = img;
+                            resolve();
+                        };
+                        img.onerror = () => {
+                            clubLogos[index] = null;
+                            resolve();
+                        };
+                        img.src = item.wappen;
+                    } else {
+                        clubLogos[index] = null;
+                        resolve();
+                    }
+                });
+            });
+            
+            await Promise.all(logoPromises);
+            drawDataPoints();
+        };
+        
+        // More robust drawing of custom data points (club logos or blue dots)
+        function drawDataPoints() {
+            if (!chart) return;
+            
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !meta.data || meta.data.length === 0) return;
+            
+            const ctx = chart.ctx;
+            if (!ctx) return;
+            
+            data.list.forEach((item, index) => {
+                if (index >= meta.data.length) return;
+                
+                const point = meta.data[index];
+                if (!point) return;
+                
+                const x = point.x;
+                const y = point.y;
+                
+                // Save current canvas state
+                ctx.save();
+                
+                if (clubLogos[index]) {
+                    // Draw club logo
+                    const size = 24;  // Make logos slightly larger for better visibility
+                    try {
+                        ctx.drawImage(clubLogos[index], x - size/2, y - size/2, size, size);
+                    } catch (e) {
+                        // Fallback to blue dot if image drawing fails
+                        ctx.beginPath();
+                        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#3498db';
+                        ctx.fill();
+                    }
+                } else {
+                    // Draw a blue dot
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#3498db';
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+            });
+        }
+        
+        // Call the logo loading function
+        loadLogos();
+        
+        // Add mousemove event to show tooltip
+        const canvas = document.getElementById('marketValueChart');
+        canvas.addEventListener('mousemove', (e) => {
+            const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: false }, false);
+            
+            if (points.length) {
+                const point = points[0];
+                const dataset = chart.data.datasets[point.datasetIndex];
+                const dataPoint = dataset.data[point.index];
+                
+                const rect = canvas.getBoundingClientRect();
+                tooltip.style.opacity = 1;
+                tooltip.style.left = `${e.clientX + 10}px`;
+                tooltip.style.top = `${e.clientY + 10}px`;
+                
+                // Format tooltip content
+                tooltip.innerHTML = `
+                    <div class="club-name">${dataPoint.club}</div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Market Value:</span>
+                        <span>${dataPoint.mw}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Date:</span>
+                        <span>${dataPoint.date}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Age:</span>
+                        <span>${dataPoint.age}</span>
+                    </div>
+                `;
+            } else {
+                tooltip.style.opacity = 0;
+            }
+        });
+        
+        canvas.addEventListener('mouseout', () => {
+            tooltip.style.opacity = 0;
+        });
+        
+        // Initial draw
+        chart.options.plugins.legend = {
+            onClick: () => {} // Disable the default legend click handler
+        };
+        
+        chart.update();
+        
+        // Custom legend click handler
+        function toggleDataset(e) {
+            const index = e.target.dataset.index;
+            const meta = chart.getDatasetMeta(index);
+            meta.hidden = !meta.hidden;
+            chart.update();
+        }
+        
+        // Make sure we always redraw logos after any chart operations
+        chart.options.animation.onComplete = () => {
+            drawDataPoints();
+        };
+        
+        chart.options.animation.onProgress = () => {
+            drawDataPoints();
+        };
+        
+        // Add plugin to ensure logos are always visible
+        const logoPlugin = {
+            id: 'logoPlugin',
+            afterDraw: (chart) => {
+                drawDataPoints();
+            }
+        };
+        
+        // Register the plugin
+        Chart.register(logoPlugin);
+        
+        // Force an update to draw points initially
+        chart.update();
+        
+        // Set up the range chart (timeline selector at bottom)
+        const rangeCtx = document.getElementById('rangeChart').getContext('2d');
+        const rangeChart = new Chart(rangeCtx, {
+            type: 'line',
+            data: {
+                labels: data.list.map(item => new Date(item.x)),
+                datasets: [{
+                    data: data.list.map(item => ({
+                        x: new Date(item.x),
+                        y: item.y / 1000000
+                    })),
+                    borderColor: '#95a5a6',
+                    backgroundColor: 'rgba(149, 165, 166, 0.2)',
+                    borderWidth: 1,
+                    fill: true,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        display: false
+                    },
+                    y: {
+                        display: false,
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: false
+                    }
+                },
+                elements: {
+                    line: {
+                        tension: 0.3
+                    }
+                },
+                animation: false,
+                interaction: {
+                    enabled: false
+                }
+            }
+        });
+        
+        // Set up range selector elements
+        const leftHandle = document.getElementById('leftHandle');
+        const rightHandle = document.getElementById('rightHandle');
+        const rangeSelection = document.getElementById('rangeSelection');
+        const rangeOverlay = document.getElementById('rangeOverlay');
+        
+        // Initialize range selector positions
+        function updateRangeControl() {
+            const width = rangeOverlay.offsetWidth;
+            timelineWidth = width;
+            
+            leftHandle.style.width = '8px';
+            rightHandle.style.width = '8px';
+            
+            leftHandle.style.left = `${leftHandlePosition}%`;
+            rightHandle.style.left = `${rightHandlePosition - 0.5}%`;
+            
+            rangeSelection.style.left = `${leftHandlePosition}%`;
+            rangeSelection.style.width = `${rightHandlePosition - leftHandlePosition}%`;
+            
+            // Update the main chart with the selected date range
+            updateChartRange();
+        }
+        
+        // Update the main chart to show only the selected range
+        function updateChartRange() {
+            const minTime = data.list[0].x;
+            const maxTime = data.list[data.list.length - 1].x;
+            const timeRange = maxTime - minTime;
+            
+            const minValue = minTime + (timeRange * leftHandlePosition / 100);
+            const maxValue = minTime + (timeRange * rightHandlePosition / 100);
+            
+            chart.options.scales.x.min = new Date(minValue);
+            chart.options.scales.x.max = new Date(maxValue);
+            chart.update();
+            drawDataPoints();
+        }
+        
+        // Set up drag handlers for timeline controls
+        rangeOverlay.addEventListener('mousedown', (e) => {
+            const rect = rangeOverlay.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const positionPercent = (x / rect.width) * 100;
+            
+            // Determine which handle to drag or if we're dragging the selection
+            const leftDist = Math.abs(positionPercent - leftHandlePosition);
+            const rightDist = Math.abs(positionPercent - rightHandlePosition);
+            const handleThreshold = 5; // % distance to consider clicking on a handle
+            
+            if (leftDist < rightDist && leftDist < handleThreshold) {
+                // Dragging left handle
+                isDragging = true;
+                dragType = 'left';
+            } else if (rightDist < leftDist && rightDist < handleThreshold) {
+                // Dragging right handle
+                isDragging = true;
+                dragType = 'right';
+            } else if (positionPercent > leftHandlePosition && positionPercent < rightHandlePosition) {
+                // Dragging the selection itself
+                isDragging = true;
+                dragType = 'selection';
+                startDragX = x;
+            }
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const rect = rangeOverlay.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const positionPercent = (x / rect.width) * 100;
+            
+            if (dragType === 'left') {
+                leftHandlePosition = Math.max(0, Math.min(rightHandlePosition - 5, positionPercent));
+            } else if (dragType === 'right') {
+                rightHandlePosition = Math.min(100, Math.max(leftHandlePosition + 5, positionPercent));
+            } else if (dragType === 'selection') {
+                const delta = x - startDragX;
+                const deltaPercent = (delta / rect.width) * 100;
+                
+                if (deltaPercent > 0) {
+                    // Moving right
+                    if (rightHandlePosition + deltaPercent <= 100) {
+                        rightHandlePosition += deltaPercent;
+                        leftHandlePosition += deltaPercent;
+                    } else {
+                        rightHandlePosition = 100;
+                        leftHandlePosition = 100 - (rightHandlePosition - leftHandlePosition);
+                    }
+                } else {
+                    // Moving left
+                    if (leftHandlePosition + deltaPercent >= 0) {
+                        leftHandlePosition += deltaPercent;
+                        rightHandlePosition += deltaPercent;
+                    } else {
+                        leftHandlePosition = 0;
+                        rightHandlePosition = rightHandlePosition - leftHandlePosition;
+                    }
+                }
+                
+                startDragX = x;
+            }
+            
+            updateRangeControl();
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            dragType = null;
+        });
+        
+        // Initialize the timeline
+        window.addEventListener('load', () => {
+            updateRangeControl();
+        });
+        
+        window.addEventListener('resize', () => {
+            updateRangeControl();
+        });
+        
+        // Initial setup
+        updateRangeControl();
+    </script>
+</body>
+</html>
